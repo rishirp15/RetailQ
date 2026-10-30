@@ -43,7 +43,14 @@ advanced = load_advanced(folder, summary)
 page = st.sidebar.selectbox("Explore", ["Core dashboard", *PAGES])
 selected = (advanced or {}).get("features", {}).get("clustering", {})
 if selected.get("status") == "completed":
-    use_selected = st.sidebar.checkbox("Use automatically selected clusters", value=True)
+    selected_k = selected.get("metrics", {}).get("K", "?")
+    use_selected = st.sidebar.checkbox(
+        f"Use automatically selected clusters (K={selected_k})", value=False
+    )
+    st.sidebar.caption(
+        "The main dashboard starts with the four-group baseline for more actionable "
+        "customer profiles. Compare silhouette-based K selection in the Model selection page."
+    )
     if use_selected:
         customers = pd.read_csv(folder / "advanced/selected_customers.csv", dtype={"CustomerID": str, "RFMScore": str})
         segments = pd.read_csv(folder / "advanced/selected_segments.csv")
@@ -116,3 +123,16 @@ with quality:
 **Limitations:** returns are excluded, so revenue is not net revenue. Exact duplicate removal is an assumption. A 90-day inactivity threshold is a business rule. K=4 is the retained baseline; automatic model selection compares K=2–8 when advanced results are available. Segment recommendations are hypotheses to test. This dataset fits on one computer; local Spark demonstrates APIs, not cluster speedup.
 """)
     st.json(summary["model"])
+    with st.expander("Models and algorithms used in RetailIQ"):
+        st.markdown("""
+| Model / algorithm | Type | What it does in this project |
+| --- | --- | --- |
+| K-Means | Unsupervised clustering | Groups customers with similar log-scaled RFM behavior. Cluster IDs are labels, not known customer categories. |
+| FP-Growth | Frequent-pattern mining | Finds products that commonly occur in the same invoice basket; rules are associations, not causes. |
+| ALS | Collaborative filtering | Recommends products from customer-product purchase-count patterns; its score is preference strength, not a probability. |
+| Logistic Regression | Supervised classification | A simple linear baseline for whether a customer makes no observed purchase in the next fixed horizon. |
+| Random Forest | Supervised classification | Combines decision trees to capture nonlinear behavior patterns for that same future no-purchase label. |
+| Gradient-Boosted Trees | Supervised classification | Builds trees sequentially to correct earlier errors for that same label. |
+
+The three classifiers are compared using one chronological holdout. The outcome is **no purchase observed during the horizon**, not permanent churn. FP-Growth and K-Means are useful algorithms, but they are not supervised predictive classifiers.
+""")

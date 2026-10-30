@@ -19,10 +19,20 @@ from retailiq.runtime import create_spark, read_transactions
 from retailiq.storage import file_hash, write_json, write_records
 from retailiq.streaming import replay_stream
 
-FEATURES = ["clustering", "baskets", "recommendations", "cohorts", "migration", "prediction", "streaming", "performance"]
+FEATURES = [
+    "clustering",
+    "baskets",
+    "recommendations",
+    "cohorts",
+    "migration",
+    "prediction",
+    "streaming",
+    "performance",
+]
 
 
 def main():
+    """Run selected advanced stages and persist status for safe resumption."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=Path("data/raw/online_retail.csv"))
     parser.add_argument("--output", type=Path, default=Path("outputs/uci/advanced"))
@@ -69,7 +79,12 @@ def main():
         for feature in FEATURES:
             if feature not in args.features:
                 continue
-            if state["features"].get(feature, {}).get("status") == "completed" and not args.rerun:
+            prior_stage = state["features"].get(feature, {})
+            has_current_prediction_comparison = bool(
+                prior_stage.get("metrics", {}).get("model_comparison")
+            )
+            if (prior_stage.get("status") == "completed" and not args.rerun
+                    and (feature != "prediction" or has_current_prediction_comparison)):
                 print(f"Reusing completed stage: {feature}", flush=True)
                 continue
             start = perf_counter()
@@ -121,6 +136,7 @@ def main():
                     export_csv(latest, args.output / "inactivity_risk.csv")
                     export_csv(holdout, args.output / "inactivity_holdout.csv")
                     write_records(args.output / "feature_importance.csv", importance)
+                    write_records(args.output / "model_comparison.csv", metrics["model_comparison"])
                     model.write().overwrite().save(str((args.output / "models/inactivity").resolve()))
                     latest.unpersist()
                     holdout.unpersist()

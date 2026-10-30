@@ -1,6 +1,6 @@
 # Measured advanced UCI results
 
-These results come from the implemented Spark jobs on the same 392,692 cleaned positive-purchase rows, 4,338 customers and 18,532 invoices as the baseline. Monetary totals remain £8,887,208.89, excluding returns and cancellations.
+These recorded results come from earlier completed Spark jobs on the same 392,692 cleaned positive-purchase rows, 4,338 customers and 18,532 invoices as the baseline. Monetary totals remain £8,887,208.89, excluding returns and cancellations. The inactivity metrics below are the earlier Random Forest-only run; the current code compares Logistic Regression, Random Forest and Gradient-Boosted Trees. Rerun the prediction feature before presenting comparative model results.
 
 | Feature | Measured result |
 | --- | --- |

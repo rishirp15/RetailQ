@@ -12,6 +12,7 @@ REQUIRED = ["InvoiceNo", "StockCode", "Description", "Quantity", "InvoiceDate",
 
 
 def clean_transactions(raw: DataFrame):
+    """Validate transaction columns, audit rejected rows, and calculate revenue."""
     missing = set(REQUIRED) - set(raw.columns)
     if missing:
         raise ValueError(f"Missing columns: {sorted(missing)}")
@@ -54,6 +55,7 @@ def clean_transactions(raw: DataFrame):
 
 
 def compute_rfm(clean: DataFrame, reference_date=None):
+    """Aggregate customer recency, frequency, monetary value, and quantile scores."""
     latest = clean.agg(F.max(F.to_date("InvoiceDate"))).first()[0]
     if latest is None:
         raise ValueError("No valid purchase rows remain after cleaning.")
@@ -81,6 +83,7 @@ def compute_rfm(clean: DataFrame, reference_date=None):
 
 
 def cluster_customers(rfm: DataFrame, k: int = 4, seed: int = 42):
+    """Fit a log-scaled RFM K-Means pipeline and describe its customer clusters."""
     if k < 2:
         raise ValueError("K must be at least 2.")
     distinct = rfm.select("Recency", "Frequency", "Monetary").distinct().count()

@@ -1,9 +1,11 @@
 """Shared Spark runtime and a source-built adapter for Windows local storage."""
-import os
 import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+from retailiq.schema import read_transactions
 
 
 def portable_filesystem_jar():
@@ -50,8 +52,3 @@ def create_spark(name="RetailIQ", master="local[2]", partitions=4):
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     return spark
-
-
-def read_transactions(spark, path):
-    return (spark.read.option("header", True).option("multiLine", True)
-            .option("escape", '"').csv(str(Path(path).resolve())))

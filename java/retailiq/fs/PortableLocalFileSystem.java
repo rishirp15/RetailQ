@@ -2,7 +2,6 @@ package retailiq.fs;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -77,7 +76,11 @@ public class PortableLocalFileSystem extends RawLocalFileSystem {
         if (!Files.exists(from)) return false;
         if (Files.isDirectory(to)) to = to.resolve(from.getFileName());
         if (Files.exists(to)) return false;
-        Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
+        // Hadoop's output committer renames temporary task directories on Windows.
+        // ATOMIC_MOVE can fail with AccessDeniedException for directory commits on
+        // NTFS even when the source and destination are on the same volume. A normal
+        // same-volume NIO move retains rename semantics and works with the committer.
+        Files.move(from, to);
         return true;
     }
 }

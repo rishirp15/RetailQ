@@ -144,6 +144,13 @@ def render_page(page, folder, state):
     elif page == "Inactivity prediction":
         risks = report(folder, "inactivity_risk")
         importance = report(folder, "feature_importance")
+        comparison_path = folder / "model_comparison.csv"
+        if comparison_path.exists():
+            comparison = pd.read_csv(comparison_path)
+            st.subheader("Compare classifiers on the same later-period holdout")
+            st.dataframe(comparison, hide_index=True, width="stretch")
+            st.caption(metrics.get("selection_rule", "Models use the same time-based holdout."))
+        st.metric("Selected classifier", metrics.get("model", "Random Forest"))
         cols = st.columns(4)
         for col, label, key in zip(cols, ["Holdout ROC AUC", "Holdout PR AUC", "Precision", "Recall"], ["roc_auc", "pr_auc", "precision", "recall"]):
             value = metrics[key]
@@ -157,13 +164,24 @@ def render_page(page, folder, state):
         st.caption(f"Latest scores use the {metrics['latest_snapshot']} snapshot. Future outcomes for these scores are not observed in this dataset.")
         st.dataframe(chosen, hide_index=True, width="stretch")
         st.download_button("Download selected risk scores", chosen.to_csv(index=False), "inactivity_risk.csv", "text/csv")
-        st.plotly_chart(px.bar(importance.sort_values("Importance"), x="Importance", y="Feature", orientation="h", title="Historical evaluation model feature importance"), width="stretch")
+        st.plotly_chart(px.bar(importance.sort_values("Importance"), x="Importance", y="Feature", orientation="h",
+            title=f"Feature importance · {metrics.get('model', 'Random Forest')} evaluation model"), width="stretch")
         confusion = metrics["confusion_matrix"]
         st.plotly_chart(px.imshow([[confusion["tn"], confusion["fp"]], [confusion["fn"], confusion["tp"]]],
             x=["Predict purchase", "Predict no purchase"], y=["Actual purchase", "Actual no purchase"], text_auto=True,
             color_continuous_scale="Blues", title="Holdout confusion matrix (threshold 0.5)"), width="stretch")
         with st.expander("Time split and evaluation details"):
             st.json(metrics)
+        with st.expander("What the three classifiers learn"):
+            st.markdown("""
+| Classifier | What it learns | Why compare it here? |
+| --- | --- | --- |
+| Logistic Regression | A weighted, mostly linear relationship between customer behavior features and the chance of no observed purchase in the horizon. | Simple, fast baseline that is easier to explain. |
+| Random Forest | Many decision trees trained on bootstrapped data; their votes capture nonlinear thresholds and feature interactions. | Robust nonlinear comparison model with feature importance. |
+| Gradient-Boosted Trees | Trees added sequentially, where each new tree focuses on errors from earlier trees. | Tests whether sequential correction improves the same holdout ranking. |
+
+All three use the same six historical customer features and the same chronological holdout. The chosen model is refit on fully labelled snapshots only after the comparison. Latest customer scores have no future labels in this dataset.
+""")
     elif page == "Streaming replay":
         render_stream(folder)
     elif page == "Spark performance":

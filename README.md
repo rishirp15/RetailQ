@@ -13,7 +13,7 @@ See [measured advanced results](docs/ADVANCED_RESULTS.md) for the actual model e
 .\scripts\run.ps1 -Advanced
 ```
 
-Use the sidebar's **Explore** selector to open each page. Once advanced results exist, the dashboard defaults to automatically selected clusters; uncheck the sidebar option to inspect the original K=4 baseline.
+Use the sidebar's **Explore** selector to open each page. The main dashboard defaults to the original K=4 baseline for more actionable customer groups. Once advanced results exist, enable **Use automatically selected clusters** to compare the silhouette-selected K; inspect the **Model selection** page to see why it was chosen.
 
 ## Run on Windows
 
@@ -91,6 +91,7 @@ docker run --rm -p 8501:8501 -v "${PWD}/outputs:/app/outputs" retailiq
 | Subject concept | Implementation |
 | --- | --- |
 | Distributed data cleaning | Explicit type conversion, filters, duplicate removal, cleaning audit |
+| Explicit input schema | Header-aware CSV schema: numeric purchase fields are typed at read time; identifiers stay strings |
 | Spark transformations | select, withColumn, filter, groupBy, joins |
 | Spark SQL | Customer-level last purchase, distinct invoices and spend |
 | RDD operations | Country revenue using map, reduceByKey, sortBy |
@@ -99,6 +100,14 @@ docker run --rm -p 8501:8501 -v "${PWD}/outputs:/app/outputs" retailiq
 | Business interpretation | RFM scores, high-value/inactive flags, revenue share and suggested actions |
 
 See [the learning and presentation guide](docs/PROJECT_GUIDE.md) for formulas, execution order, a demo script and viva preparation.
+
+To run a separate row-scaling exercise without overwriting `outputs/uci`:
+
+```powershell
+python -m retailiq.scale_benchmark --input data/raw/online_retail.csv --output outputs/scale_study --factors 1 2 4 --repetitions 2 --partitions 4 --master 'local[2]'
+```
+
+It replicates cleaned rows in Spark and checks that country counts and Decimal revenue scale exactly. This is a local workload-scaling demonstration, not a multi-node performance benchmark. Results are written to `outputs/scale_study/scale_results.csv` and `scale_summary.json`.
 
 The first full UCI run produced 4,338 customers across 18,532 orders. See [measured baseline results](docs/RESULTS.md) for the cleaning audit and segment findings.
 
@@ -116,6 +125,8 @@ Each successful run creates `summary.json`, `customers.csv`, `segments.csv`, `mo
 - Cosine measures basket proportions, not demographics or causation. One-customer-to-all scoring avoids a quadratic all-pairs comparison.
 - Return/cancellation exclusion means **purchase revenue, not net revenue**. Dropping duplicates assumes repeated identical rows are accidental. Recommendations require business testing.
 - This 541,909-row dataset fits on a laptop. `local[2]` runs Spark locally with two threads; demonstrate the distributed APIs without claiming a measured cluster speedup. Excel-to-CSV conversion is a one-time streaming ingestion step outside Spark.
+- CSV input uses an explicit schema assembled from the header, so `Quantity` and `UnitPrice` are parsed as doubles at read time while identifiers stay strings. Invalid numeric text becomes null and is counted by the cleaning audit. Reordered required columns are supported; header names must still match the project fields.
+- Pipeline summaries record Spark version, master, shuffle partition count, and parsed input schema for reproducibility.
 
 ## Dataset and attribution
 

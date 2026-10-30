@@ -44,7 +44,7 @@ The dashboard uses `advanced/` under its selected baseline results folder. Separ
 - Measure squared-Euclidean silhouette, training cost, smallest/largest cluster and elapsed experiment time.
 - Compare seeded assignments with adjusted Rand index (ARI). Only the small cluster contingency table is collected; customer IDs are never used as numeric features.
 - Select the highest mean silhouette among K values for which every seed populates all K clusters and the smallest cluster contains at least 1% of customers, with a minimum of two customers. If none qualifies, use the highest mean score. Break mean-score ties in favor of smaller K. Choose the highest-silhouette seed within the selected K.
-- The sidebar defaults to selected clusters once ready and provides a checkbox to return to the original K=4 baseline.
+- The main dashboard defaults to the original K=4 baseline for finer business profiles. Its sidebar checkbox switches to the silhouette-selected K for comparison.
 
 **Interpretation:** stability and geometric separation do not prove marketing usefulness. A two-cluster solution may separate broad groups well while four clusters provide more actionable detail. The original baseline findings remain available in `docs/RESULTS.md`.
 
@@ -93,15 +93,23 @@ The analysis is retrospective and descriptive: its frozen model was fitted on th
 ## 6. Future inactivity prediction
 
 **Module:** `retailiq/prediction.py`  
-**Outputs:** `inactivity_risk.csv`, `inactivity_holdout.csv`, `feature_importance.csv`, `models/inactivity/`.
+**Outputs:** `inactivity_risk.csv`, `inactivity_holdout.csv`, `feature_importance.csv`, `model_comparison.csv`, `models/inactivity/`.
 
 Label = no observed positive purchase within the following 60 days. Features use only purchases strictly before each cutoff: log recency, invoice frequency, monetary value, tenure, product diversity and average order value. Customer identity is excluded.
 
 For the UCI end date, training snapshots are 13 June and 12 August 2011, with all training outcomes ending before 11 October. The held-out snapshot is 11 October, with outcomes observed until 10 December (exclusive). There is no random transaction split. Customers can occur at multiple historical snapshots; this evaluates later behavior of an existing customer population, not generalization to entirely new identities.
 
-Fit a 60-tree random forest (depth 5, minimum five examples per leaf). Report ROC AUC, PR AUC, precision, recall, F1, accuracy, majority-class baseline, class prevalence, Brier score and confusion matrix at threshold 0.5. Feature importance refers to the historical evaluation model.
+Compare three MLlib classifiers using the same chronological split and six log-transformed customer behavior features:
 
-After evaluation, refit using every fully labelled snapshot for scores at the latest reference date. Their future outcomes are unobserved. The dashboard threshold filters this latest risk list; it does not change the reported holdout confusion matrix. Scores are uncalibrated, and 60-day non-purchase is not proof of permanent churn.
+| Model | How it works | Role in the comparison |
+| --- | --- | --- |
+| Logistic Regression | Learns a weighted linear boundary between the two outcomes. | Interpretable baseline; feature magnitudes are reported as absolute standardized coefficients. |
+| Random Forest | Trains many trees on sampled records/features and combines their votes. | Captures nonlinear thresholds and interactions; retains the original project model. |
+| Gradient-Boosted Trees | Adds trees sequentially to reduce the errors of earlier trees. | Tests whether boosting improves ranking on the same holdout. |
+
+Select the model by highest holdout PR AUC, then ROC AUC and F1 as tie-breakers; if the holdout does not contain both labels, use F1. The selected classifier is evaluated at threshold 0.5 and reports ROC AUC, PR AUC, precision, recall, F1, accuracy, majority-class baseline, class prevalence, Brier score and confusion matrix. `model_comparison.csv` stores the side-by-side metrics. Tree models use Spark feature importance; Logistic Regression uses absolute coefficients after standardization. These are different explanation methods and should not be compared as if they were on an identical scale.
+
+After model comparison, refit the selected pipeline using every fully labelled snapshot for scores at the latest reference date. Their future outcomes are unobserved. The dashboard threshold filters this latest risk list; it does not change the reported holdout confusion matrix. Scores are not assumed calibrated, and 60-day non-purchase is not proof of permanent churn.
 
 ## 7. Structured Streaming replay and recovery
 

@@ -1,18 +1,30 @@
-"""Run with python -m retailiq.pipeline --input data/raw/online_retail.csv."""
+"""Run the baseline RetailIQ batch analysis.
+
+Example: ``python -m retailiq.pipeline --input data/raw/online_retail.csv``.
+"""
 import argparse
 import csv
 import json
-import os
-import sys
 from datetime import date
 from pathlib import Path
 
-from pyspark.sql import SparkSession, functions as F
-from retailiq.analytics import (clean_transactions, compute_rfm, cluster_customers,
-                                similar_customers, country_revenue_rdd)
+from pyspark.sql import functions as F
+from retailiq.analytics import (
+    clean_transactions,
+    compute_rfm,
+    cluster_customers,
+    country_revenue_rdd,
+    similar_customers,
+)
+from retailiq.runtime import create_spark
+from retailiq.schema import read_transactions
 
 
 def export_csv(frame, path):
+    """Write a Spark DataFrame to one driver-side CSV file, atomically.
+
+    This helper is for the project's small result tables, not raw large datasets.
+    """
     # Driver exports are appropriate for this small mini-project's aggregated outputs.
     # For large deployments, replace with distributed DataFrame.write.parquet(...).
     # Format timestamps inside Spark, before Python converts them through the host
@@ -31,6 +43,7 @@ def export_csv(frame, path):
 
 
 def main():
+    """Parse options, run core analyses, and publish dashboard-ready outputs."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("outputs/uci"))
@@ -42,17 +55,9 @@ def main():
     args = parser.parse_args()
     if not args.input.is_file():
         parser.error(f"Input file not found: {args.input}. Run python -m retailiq.data first.")
-    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
-    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
-    os.environ.setdefault("SPARK_LOCAL_IP", "127.0.0.1")
-    spark = (SparkSession.builder.appName("RetailIQ").master(args.master)
-             .config("spark.sql.shuffle.partitions", "4")
-             .config("spark.sql.ansi.enabled", "false")
-             .config("spark.sql.legacy.timeParserPolicy", "CORRECTED")
-             .config("spark.driver.bindAddress", "127.0.0.1").getOrCreate())
-    spark.sparkContext.setLogLevel("WARN")
+    spark = create_spark("RetailIQ", args.master, partitions=4)
     try:
-        raw = spark.read.option("header", True).option("multiLine", True).option("escape", '"').csv(str(args.input.resolve()))
+        raw = read_transactions(spark, args.input)
         print("Cleaning transaction rows...")
         clean, audit = clean_transactions(raw)
         print(f"Cleaning audit: {audit}")
@@ -80,6 +85,9 @@ def main():
             writer.writerows(countries)
         summary = {"dataset": "Synthetic demonstration" if args.synthetic else "User-provided retail transactions",
                    "input": str(args.input), "synthetic": args.synthetic, "reference_date": str(reference),
+                   "spark_version": spark.version, "master": spark.sparkContext.master,
+                   "shuffle_partitions": spark.conf.get("spark.sql.shuffle.partitions"),
+                   "input_schema": {field.name: field.dataType.simpleString() for field in raw.schema.fields},
                    "audit": audit, "customers": rfm.count(),
                    "orders": clean.select("InvoiceNo").distinct().count(),
                    "revenue": float(rfm.agg(F.sum("Monetary")).first()[0]),
